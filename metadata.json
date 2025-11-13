@@ -1,0 +1,5 @@
+{
+  "name": "Analisador de Recibos com IA",
+  "description": "Faça upload de uma imagem de um recibo de depósito bancário para extrair automaticamente informações importantes como data, valor, instituição financeira, nome do depositante e conta de destino usando a IA do Gemini.",
+  "requestFramePermissions": []
+}
