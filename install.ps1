@@ -9,35 +9,35 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$EnvKeyName = "GEMINI_API_KEY"
+
+function Write-Banner {
+    Write-Host "================================================" -ForegroundColor Cyan
+}
+
 function Write-Header {
     Write-Host ""
-    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Banner
     Write-Host "   Analisador de Recibos com IA - Instalador   " -ForegroundColor Cyan
-    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Banner
     Write-Host ""
 }
 
-function Check-NodeJS {
-    Write-Host "Verificando Node.js..." -ForegroundColor Yellow
-    try {
-        $nodeVersion = node --version 2>&1
-        if ($LASTEXITCODE -ne 0) { throw }
-        Write-Host "Node.js encontrado: $nodeVersion" -ForegroundColor Green
-    } catch {
-        Write-Host "ERRO: Node.js nao encontrado." -ForegroundColor Red
-        Write-Host "Instale o Node.js em: https://nodejs.org/" -ForegroundColor Red
+function Assert-Tool {
+    param([string]$Name, [string]$InstallHint = "")
+    Write-Host "Verificando $Name..." -ForegroundColor Yellow
+    $version = & $Name --version 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERRO: $Name nao encontrado." -ForegroundColor Red
+        if ($InstallHint) { Write-Host $InstallHint -ForegroundColor Red }
         exit 1
     }
+    Write-Host "$Name encontrado: $version" -ForegroundColor Green
+}
 
-    Write-Host "Verificando npm..." -ForegroundColor Yellow
-    try {
-        $npmVersion = npm --version 2>&1
-        if ($LASTEXITCODE -ne 0) { throw }
-        Write-Host "npm encontrado: v$npmVersion" -ForegroundColor Green
-    } catch {
-        Write-Host "ERRO: npm nao encontrado." -ForegroundColor Red
-        exit 1
-    }
+function Check-NodeJS {
+    Assert-Tool -Name "node" -InstallHint "Instale o Node.js em: https://nodejs.org/"
+    Assert-Tool -Name "npm"
 }
 
 function Install-Dependencies {
@@ -56,14 +56,10 @@ function Setup-EnvFile {
     Write-Host "Configurando variaveis de ambiente..." -ForegroundColor Yellow
 
     $envFile = ".env.local"
-
-    if (Test-Path $envFile) {
-        Write-Host "Arquivo $envFile ja existe." -ForegroundColor Cyan
-        $existing = Get-Content $envFile | Where-Object { $_ -match "^GEMINI_API_KEY=" }
-        if ($existing) {
-            Write-Host "GEMINI_API_KEY ja configurada." -ForegroundColor Green
-            return
-        }
+    $existing = Get-Content $envFile -ErrorAction SilentlyContinue | Where-Object { $_ -match "^$EnvKeyName=" }
+    if ($existing) {
+        Write-Host "$EnvKeyName ja configurada." -ForegroundColor Green
+        return
     }
 
     if (-not $GeminiApiKey) {
@@ -75,19 +71,19 @@ function Setup-EnvFile {
     }
 
     if ($GeminiApiKey) {
-        "GEMINI_API_KEY=$GeminiApiKey" | Out-File -FilePath $envFile -Encoding utf8 -Append
-        Write-Host "GEMINI_API_KEY salva em $envFile" -ForegroundColor Green
+        "$EnvKeyName=$GeminiApiKey" | Out-File -FilePath $envFile -Encoding utf8 -Append
+        Write-Host "$EnvKeyName salva em $envFile" -ForegroundColor Green
     } else {
-        Write-Host "Aviso: GEMINI_API_KEY nao configurada. Edite o arquivo $envFile antes de iniciar." -ForegroundColor Yellow
-        "GEMINI_API_KEY=" | Out-File -FilePath $envFile -Encoding utf8 -Append
+        Write-Host "Aviso: $EnvKeyName nao configurada. Edite o arquivo $envFile antes de iniciar." -ForegroundColor Yellow
+        "$EnvKeyName=" | Out-File -FilePath $envFile -Encoding utf8 -Append
     }
 }
 
 function Show-Instructions {
     Write-Host ""
-    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Banner
     Write-Host "   Instalacao concluida com sucesso!           " -ForegroundColor Green
-    Write-Host "================================================" -ForegroundColor Cyan
+    Write-Banner
     Write-Host ""
     Write-Host "Para iniciar o aplicativo, execute:" -ForegroundColor White
     Write-Host "   npm run dev" -ForegroundColor Yellow
@@ -96,7 +92,6 @@ function Show-Instructions {
     Write-Host ""
 }
 
-# Main
 Write-Header
 Check-NodeJS
 Install-Dependencies
