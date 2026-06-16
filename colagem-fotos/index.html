@@ -230,10 +230,6 @@
 
       <div class="color-row">
         <div>
-          <span>Camisa</span>
-          <input type="color" id="colorJersey" value="#f7d117" />
-        </div>
-        <div>
           <span>Detalhe/contorno</span>
           <input type="color" id="colorMain" value="#1f8a3d" />
         </div>
@@ -260,8 +256,8 @@
       <button id="downloadBtn" class="secondary" disabled>Baixar imagem (PNG)</button>
 
       <div class="notice">
-        Observação: o escudo no peito da camisa é genérico (estrela), para não reproduzir marcas
-        registradas de federações/fabricantes. As cores e o nome do título podem ser personalizados livremente.
+        Cada foto é apenas recortada (sem distorcer) e colada lado a lado nas fileiras, exatamente
+        como enviada — nenhuma característica do rosto é alterada.
       </div>
     </div>
 
@@ -543,93 +539,30 @@
     drawArcText(text, W/2, centerY, radius, arcSpan, ctx.font, accentColor, trimColor, fontSize*0.2);
   }
 
-  // ---------- Players (face photo kept intact, only cropped into the jersey) ----------
-  function drawStar(cx, cy, r, color){
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.beginPath();
-    for (let i = 0; i < 10; i++){
-      const a = (Math.PI/5)*i - Math.PI/2;
-      const rad = i % 2 === 0 ? r : r*0.45;
-      const x = Math.cos(a)*rad, y = Math.sin(a)*rad;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawPlayer(img, cx, headCy, size, jerseyColor, trimColor, accentColor){
-    const faceRy = size * 0.52;
-    const faceRx = faceRy * 0.82;
-    const shoulderY = headCy + faceRy * 0.62;
-    const halfShoulder = size * 0.62;
-    const halfBottom = size * 0.85;
-    const bodyBottom = shoulderY + size * 1.05;
-    const sleeveDrop = size * 0.28;
-    const neckW = size * 0.22;
-
+  // ---------- Photo tiles: crop each photo and paste it side by side, untouched ----------
+  function drawPhotoTile(img, x, y, w, h, borderColor){
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.45)';
-    ctx.shadowBlur = size * 0.18;
-    ctx.shadowOffsetY = size * 0.05;
-
-    // jersey body
-    ctx.beginPath();
-    ctx.moveTo(cx - neckW, shoulderY);
-    ctx.lineTo(cx - halfShoulder, shoulderY + sleeveDrop*0.25);
-    ctx.lineTo(cx - halfShoulder*1.08, shoulderY + sleeveDrop);
-    ctx.lineTo(cx - halfBottom, bodyBottom);
-    ctx.lineTo(cx + halfBottom, bodyBottom);
-    ctx.lineTo(cx + halfShoulder*1.08, shoulderY + sleeveDrop);
-    ctx.lineTo(cx + halfShoulder, shoulderY + sleeveDrop*0.25);
-    ctx.lineTo(cx + neckW, shoulderY);
-    ctx.quadraticCurveTo(cx, shoulderY + neckW*0.85, cx - neckW, shoulderY);
-    ctx.closePath();
-    ctx.fillStyle = jerseyColor;
+    ctx.shadowBlur = Math.min(w, h) * 0.10;
+    ctx.shadowOffsetY = Math.min(w, h) * 0.03;
+    drawRoundedRect(x, y, w, h, Math.min(w, h) * 0.05);
+    ctx.fillStyle = '#000';
     ctx.fill();
     ctx.shadowColor = 'transparent';
 
-    // collar trim
-    ctx.beginPath();
-    ctx.moveTo(cx - neckW, shoulderY);
-    ctx.quadraticCurveTo(cx, shoulderY + neckW*0.85, cx + neckW, shoulderY);
-    ctx.lineWidth = size * 0.09;
-    ctx.strokeStyle = trimColor;
-    ctx.stroke();
-
-    // sleeve trims
-    ctx.lineWidth = size * 0.07;
-    ctx.beginPath();
-    ctx.moveTo(cx - halfShoulder, shoulderY + sleeveDrop*0.25);
-    ctx.lineTo(cx - halfShoulder*1.08, shoulderY + sleeveDrop);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(cx + halfShoulder, shoulderY + sleeveDrop*0.25);
-    ctx.lineTo(cx + halfShoulder*1.08, shoulderY + sleeveDrop);
-    ctx.stroke();
-
-    // generic crest (star) on the chest
-    drawStar(cx - halfBottom*0.45, shoulderY + size*0.55, size*0.16, accentColor);
-
-    // face photo - unaltered, only cropped (cover) into an oval
     ctx.save();
-    ctx.beginPath();
-    ctx.ellipse(cx, headCy, faceRx, faceRy, 0, 0, Math.PI*2);
-    ctx.closePath();
+    drawRoundedRect(x, y, w, h, Math.min(w, h) * 0.05);
     ctx.clip();
+    // photo is only cropped (cover) to fill the tile - never distorted or filtered
     const iw = img.naturalWidth, ih = img.naturalHeight;
-    const scale = Math.max((faceRx*2)/iw, (faceRy*2)/ih);
+    const scale = Math.max(w/iw, h/ih);
     const dw = iw*scale, dh = ih*scale;
-    ctx.drawImage(img, cx - dw/2, headCy - dh/2, dw, dh);
+    ctx.drawImage(img, x + w/2 - dw/2, y + h/2 - dh/2, dw, dh);
     ctx.restore();
 
-    // thin separation outline around the face
-    ctx.beginPath();
-    ctx.ellipse(cx, headCy, faceRx, faceRy, 0, 0, Math.PI*2);
-    ctx.lineWidth = size * 0.035;
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = Math.max(2, Math.min(w, h) * 0.025);
+    ctx.strokeStyle = borderColor;
+    drawRoundedRect(x, y, w, h, Math.min(w, h) * 0.05);
     ctx.stroke();
 
     ctx.restore();
@@ -691,7 +624,6 @@
     const W = canvas.width, H = canvas.height;
     const title = document.getElementById('title').value || 'TIME';
     const subtitle = document.getElementById('subtitle').value || '';
-    const colorJersey = document.getElementById('colorJersey').value;
     const colorMain = document.getElementById('colorMain').value;
     const colorAccent = document.getElementById('colorAccent').value;
     const colorBg = document.getElementById('colorBg').value;
@@ -707,28 +639,27 @@
     const bottomTextY = H - H*0.045;
     const ballY = hasSubtitle ? bottomTextY - H*0.075 : H - H*0.06;
 
-    // photo grid area (rows overlap like a real team photo, back rows smaller)
+    // photo grid area - photos are cropped and placed side by side, row by row
     const gridTop = H * 0.20;
-    const gridBottom = (hasSubtitle ? ballY - ballR*1.3 : ballY - ballR*1.3);
+    const gridBottom = ballY - ballR*1.3;
     const gridHeight = gridBottom - gridTop;
+    const gridLeft = W * 0.06;
+    const gridWidth = W * 0.88;
 
     const rows = computeRows(photos.length);
     const R = rows.length;
-    const rowGap = gridHeight / R;
-
-    const sizes = rows.map((_, i) => rowGap * (0.40 + (i/Math.max(R-1,1)) * 0.16));
-    const cys = rows.map((_, i) => gridTop + rowGap * i + rowGap * 0.55);
+    const gap = W * 0.012;
+    const rowHeight = (gridHeight - gap*(R-1)) / R;
 
     let photoIdx = 0;
     rows.forEach((rowSize, rIndex) => {
-      const usableWidth = W * (0.80 + rIndex * 0.02);
-      const slotWidth = usableWidth / rowSize;
-      const startX = (W - usableWidth)/2 + slotWidth/2;
+      const tileWidth = (gridWidth - gap*(rowSize-1)) / rowSize;
+      const y = gridTop + rIndex * (rowHeight + gap);
       for (let c = 0; c < rowSize; c++){
         const photo = photos[photoIdx];
         if (!photo) break;
-        const cx = startX + slotWidth * c;
-        drawPlayer(photo.img, cx, cys[rIndex], sizes[rIndex], colorJersey, colorMain, colorAccent);
+        const x = gridLeft + c * (tileWidth + gap);
+        drawPhotoTile(photo.img, x, y, tileWidth, rowHeight, colorAccent);
         photoIdx++;
       }
     });
