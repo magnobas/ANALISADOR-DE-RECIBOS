@@ -468,8 +468,71 @@
       if (isWhiteArr[idx] && whiteLabel.sizes[whiteLabel.compId[idx]] > sizeThreshold) { finalBg[idx] = 1; continue; }
     }
 
-    const fgMask = new Uint8Array(n);
+    let fgMask = new Uint8Array(n);
     for (let idx=0; idx<n; idx++) fgMask[idx] = finalBg[idx] ? 0 : 1;
+
+    // Morphological closing (dilate then erode by the same radius): in some photos the thin
+    // green jersey collar trim happens to touch a leftover numeral fragment, so the size-gated
+    // green removal above wipes out the whole collar - severing the head from the torso into two
+    // separate blobs. Since only the single largest blob survives below, the (usually bigger)
+    // torso would win and the head would be discarded, producing a "headless" cutout. Closing
+    // bridges small gaps like that without shrinking any real silhouette: closing is "extensive"
+    // (its result always contains the original mask), so genuine collar/jersey substance is never
+    // eroded away - it only ever fills in small holes/gaps.
+    function maxFilterH(mask, r){
+      const out = new Uint8Array(n);
+      for (let y=0; y<h; y++){
+        const rowOff = y*w;
+        for (let x=0; x<w; x++){
+          const xs = Math.max(0, x-r), xe = Math.min(w-1, x+r);
+          let m = 0;
+          for (let xx=xs; xx<=xe; xx++){ if (mask[rowOff+xx]){ m=1; break; } }
+          out[rowOff+x] = m;
+        }
+      }
+      return out;
+    }
+    function maxFilterV(mask, r){
+      const out = new Uint8Array(n);
+      for (let x=0; x<w; x++){
+        for (let y=0; y<h; y++){
+          const ys = Math.max(0, y-r), ye = Math.min(h-1, y+r);
+          let m = 0;
+          for (let yy=ys; yy<=ye; yy++){ if (mask[yy*w+x]){ m=1; break; } }
+          out[y*w+x] = m;
+        }
+      }
+      return out;
+    }
+    function minFilterH(mask, r){
+      const out = new Uint8Array(n);
+      for (let y=0; y<h; y++){
+        const rowOff = y*w;
+        for (let x=0; x<w; x++){
+          const xs = Math.max(0, x-r), xe = Math.min(w-1, x+r);
+          let m = 1;
+          for (let xx=xs; xx<=xe; xx++){ if (!mask[rowOff+xx]){ m=0; break; } }
+          out[rowOff+x] = m;
+        }
+      }
+      return out;
+    }
+    function minFilterV(mask, r){
+      const out = new Uint8Array(n);
+      for (let x=0; x<w; x++){
+        for (let y=0; y<h; y++){
+          const ys = Math.max(0, y-r), ye = Math.min(h-1, y+r);
+          let m = 1;
+          for (let yy=ys; yy<=ye; yy++){ if (!mask[yy*w+x]){ m=0; break; } }
+          out[y*w+x] = m;
+        }
+      }
+      return out;
+    }
+    const closeRadius = Math.max(6, Math.round(Math.min(w, h) * 0.02));
+    const dilated = maxFilterV(maxFilterH(fgMask, closeRadius), closeRadius);
+    fgMask = minFilterV(minFilterH(dilated, closeRadius), closeRadius);
+
     const fgLabel = labelComponents(fgMask);
     let largestId = -1, largestSize = -1;
     fgLabel.sizes.forEach((s, id) => { if (s > largestSize){ largestSize = s; largestId = id; } });
