@@ -249,8 +249,8 @@
       <div class="count">Fotos carregadas: <strong id="countLabel">0</strong> / 17</div>
 
       <label for="tolerance">Sensibilidade da remoção de fundo</label>
-      <input type="range" id="tolerance" min="15" max="90" value="42" />
-      <div class="range-value" id="toleranceValue">42</div>
+      <input type="range" id="tolerance" min="30" max="100" value="60" />
+      <div class="range-value" id="toleranceValue">60</div>
       <button id="reprocessBtn" class="ghost">Reprocessar fotos com essa sensibilidade</button>
 
       <div class="hint">Arraste as miniaturas para reordenar. Clique no “x” para remover.</div>
@@ -260,8 +260,10 @@
       <button id="downloadBtn" class="secondary" disabled>Baixar imagem (PNG)</button>
 
       <div class="notice">
-        Funciona melhor com fotos em fundo liso/uniforme (foto tipo 3x4). Se o recorte ficar
-        impreciso em alguma foto, ajuste a sensibilidade e clique em "Reprocessar".
+        Calibrado para as fotos no estilo "card" (FIFA/Panini): número, logo, bandeira,
+        faixa de nome e "Year 2B" são removidos automaticamente, ficando só a criança com a
+        camisa. Se o recorte ficar impreciso em alguma foto, ajuste a sensibilidade e clique
+        em "Reprocessar".
       </div>
     </div>
 
@@ -332,98 +334,151 @@
 
   function uid(){ return Math.random().toString(36).slice(2,9); }
 
-  // ---------- Background removal: flood-fill from edges + keep largest connected blob ----------
+  // ---------- Background removal calibrated for the "Panini/FIFA card" template ----------
+  // The source photos are player-card templates: a colored border/theme, a big green
+  // "26" numeral behind the kid, a FIFA badge + flag/"BRA" sidebar on the right, and a
+  // name banner + "Year 2B" + Panini logo at the bottom. None of that is plain/removable
+  // background in the old sense (it's all connected shapes), so instead of a generic
+  // flood-fill we: (1) crop away the fixed-position sidebar/badge and bottom banner
+  // (always in the same place on every card), then (2) classify pixels close to the
+  // card's own border color or to the brand-green numeral color as background - but only
+  // remove a green patch when its connected blob is large (the numeral), so the thin
+  // green jersey collar/cuff trim is never touched - then (3) keep only the largest
+  // remaining connected blob, which is the kid + jersey.
   function removeBackgroundAndCrop(img, tolerance){
     const maxDim = 700;
     const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-    const w = Math.max(1, Math.round(img.naturalWidth * scale));
-    const h = Math.max(1, Math.round(img.naturalHeight * scale));
+    const fullW = Math.max(1, Math.round(img.naturalWidth * scale));
+    const fullH = Math.max(1, Math.round(img.naturalHeight * scale));
 
-    const off = document.createElement('canvas');
-    off.width = w; off.height = h;
-    const octx = off.getContext('2d');
-    octx.drawImage(img, 0, 0, w, h);
-    const imageData = octx.getImageData(0, 0, w, h);
-    const data = imageData.data;
+    const full = document.createElement('canvas');
+    full.width = fullW; full.height = fullH;
+    const fctx = full.getContext('2d');
+    fctx.drawImage(img, 0, 0, fullW, fullH);
+    const fullData = fctx.getImageData(0, 0, fullW, fullH).data;
 
-    function samplePatch(cx, cy){
+    function avgPatch(cx, cy){
       let r=0,g=0,b=0,n=0;
-      for (let dy=-2; dy<=2; dy++) for (let dx=-2; dx<=2; dx++){
+      for (let dy=-3; dy<=3; dy++) for (let dx=-3; dx<=3; dx++){
         const x=cx+dx, y=cy+dy;
-        if (x<0||y<0||x>=w||y>=h) continue;
-        const i=(y*w+x)*4;
-        r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
+        if (x<0||y<0||x>=fullW||y>=fullH) continue;
+        const i=(y*fullW+x)*4;
+        r+=fullData[i]; g+=fullData[i+1]; b+=fullData[i+2]; n++;
       }
       return n ? [r/n, g/n, b/n] : [0,0,0];
     }
 
-    const visited = new Uint8Array(w*h);
-    const isBg = new Uint8Array(w*h);
+    // Sample the corners well inside the card's outer frame line: the frame itself is a
+    // thin, slightly darker/different shade than the large background fill behind the
+    // numeral, so sampling right at the edge picks the wrong reference color.
+    const insetX = Math.round(fullW * 0.045);
+    const insetY = Math.round(fullH * 0.045);
+    const corners = [
+      avgPatch(insetX, insetY), avgPatch(fullW-1-insetX, insetY),
+      avgPatch(insetX, fullH-1-insetY), avgPatch(fullW-1-insetX, fullH-1-insetY)
+    ];
+    const themeColor = [0,1,2].map(k => corners.reduce((s,c) => s+c[k], 0) / corners.length);
 
-    function colorDist(idx, ref){
-      const i = idx*4;
-      const dr = data[i]-ref[0], dg = data[i+1]-ref[1], db = data[i+2]-ref[2];
+    // Fixed relative crop: drops the FIFA badge / flag+"BRA" sidebar (right) and the
+    // name banner / "Year 2B" / Panini logo (bottom), calibrated from real sample cards.
+    const cropX0 = Math.round(fullW * 0.04);
+    const cropY0 = Math.round(fullH * 0.02);
+    const cropX1 = Math.round(fullW * 0.80);
+    const cropY1 = Math.round(fullH * 0.83);
+    const w = Math.max(1, cropX1 - cropX0);
+    const h = Math.max(1, cropY1 - cropY0);
+
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const octx = off.getContext('2d');
+    octx.drawImage(full, cropX0, cropY0, w, h, 0, 0, w, h);
+    const imageData = octx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    const BRAND_GREEN = [8, 100, 45];
+    const WHITE = [250, 250, 250];
+    const themeTol = tolerance;
+    const greenTol = Math.max(28, tolerance * 0.65);
+    const whiteTol = 55;
+
+    function dist(r,g,b,ref){
+      const dr=r-ref[0], dg=g-ref[1], db=b-ref[2];
       return Math.sqrt(dr*dr+dg*dg+db*db);
     }
 
-    function floodFrom(sx, sy){
-      const ref = samplePatch(sx, sy);
-      const stackX = [sx], stackY = [sy];
-      while (stackX.length){
-        const x = stackX.pop(), y = stackY.pop();
-        if (x<0||y<0||x>=w||y>=h) continue;
-        const idx = y*w+x;
-        if (visited[idx]) continue;
-        visited[idx] = 1;
-        if (colorDist(idx, ref) > tolerance) continue;
-        isBg[idx] = 1;
-        stackX.push(x+1,x-1,x,x); stackY.push(y,y,y+1,y-1);
+    const n = w*h;
+    const isThemeArr = new Uint8Array(n);
+    const isGreenArr = new Uint8Array(n);
+    const isWhiteArr = new Uint8Array(n);
+    for (let idx=0; idx<n; idx++){
+      const i = idx*4;
+      const r = data[i], g = data[i+1], b = data[i+2];
+      if (dist(r,g,b,themeColor) < themeTol) isThemeArr[idx] = 1;
+      if (dist(r,g,b,BRAND_GREEN) < greenTol) isGreenArr[idx] = 1;
+      if (dist(r,g,b,WHITE) < whiteTol) isWhiteArr[idx] = 1;
+    }
+
+    // The FIFA "26" badge top-right corner sits at a fixed template position regardless
+    // of theme color - carve it out unconditionally so its own lighter accent shade
+    // (which doesn't match the sampled theme color) can't bridge into the kept blob.
+    const notchX0 = Math.max(0, Math.round(fullW * 0.70) - cropX0);
+    const notchY1 = Math.max(0, Math.round(fullH * 0.22) - cropY0);
+    for (let y=0; y<notchY1; y++){
+      for (let x=notchX0; x<w; x++){
+        isThemeArr[y*w+x] = 1;
       }
     }
 
-    floodFrom(2, 2);
-    floodFrom(w-3, 2);
-    floodFrom(2, h-3);
-    floodFrom(w-3, h-3);
-    floodFrom(Math.floor(w/2), 2);
-    floodFrom(Math.floor(w/2), h-3);
-    floodFrom(2, Math.floor(h/2));
-    floodFrom(w-3, Math.floor(h/2));
-
-    // connected components among the remaining (foreground) pixels - keep only the largest
-    const compId = new Int32Array(w*h).fill(-1);
-    const compSizes = [];
-    let currentId = 0;
-    const qx = new Int32Array(w*h), qy = new Int32Array(w*h);
-    for (let y=0; y<h; y++){
-      for (let x=0; x<w; x++){
-        const idx = y*w+x;
-        if (isBg[idx] || compId[idx] !== -1) continue;
-        let qHead=0, qTail=0;
-        qx[qTail]=x; qy[qTail]=y; qTail++;
-        compId[idx] = currentId;
-        let size = 0;
-        while (qHead < qTail){
-          const cx = qx[qHead], cy = qy[qHead]; qHead++;
-          size++;
-          if (cx+1<w){ const n=cy*w+cx+1; if(!isBg[n] && compId[n]===-1){ compId[n]=currentId; qx[qTail]=cx+1; qy[qTail]=cy; qTail++; } }
-          if (cx-1>=0){ const n=cy*w+cx-1; if(!isBg[n] && compId[n]===-1){ compId[n]=currentId; qx[qTail]=cx-1; qy[qTail]=cy; qTail++; } }
-          if (cy+1<h){ const n=(cy+1)*w+cx; if(!isBg[n] && compId[n]===-1){ compId[n]=currentId; qx[qTail]=cx; qy[qTail]=cy+1; qTail++; } }
-          if (cy-1>=0){ const n=(cy-1)*w+cx; if(!isBg[n] && compId[n]===-1){ compId[n]=currentId; qx[qTail]=cx; qy[qTail]=cy-1; qTail++; } }
+    function labelComponents(mask){
+      const compId = new Int32Array(n).fill(-1);
+      const sizes = [];
+      const qx = new Int32Array(n), qy = new Int32Array(n);
+      let cid = 0;
+      for (let y=0; y<h; y++){
+        for (let x=0; x<w; x++){
+          const idx = y*w+x;
+          if (!mask[idx] || compId[idx] !== -1) continue;
+          let qHead=0, qTail=0;
+          qx[qTail]=x; qy[qTail]=y; qTail++;
+          compId[idx] = cid;
+          let size = 0;
+          while (qHead < qTail){
+            const cx = qx[qHead], cy = qy[qHead]; qHead++;
+            size++;
+            if (cx+1<w){ const ni=cy*w+cx+1; if(mask[ni] && compId[ni]===-1){ compId[ni]=cid; qx[qTail]=cx+1; qy[qTail]=cy; qTail++; } }
+            if (cx-1>=0){ const ni=cy*w+cx-1; if(mask[ni] && compId[ni]===-1){ compId[ni]=cid; qx[qTail]=cx-1; qy[qTail]=cy; qTail++; } }
+            if (cy+1<h){ const ni=(cy+1)*w+cx; if(mask[ni] && compId[ni]===-1){ compId[ni]=cid; qx[qTail]=cx; qy[qTail]=cy+1; qTail++; } }
+            if (cy-1>=0){ const ni=(cy-1)*w+cx; if(mask[ni] && compId[ni]===-1){ compId[ni]=cid; qx[qTail]=cx; qy[qTail]=cy-1; qTail++; } }
+          }
+          sizes.push(size);
+          cid++;
         }
-        compSizes.push(size);
-        currentId++;
       }
+      return { compId, sizes };
     }
 
+    const sizeThreshold = n * 0.004;
+    const greenLabel = labelComponents(isGreenArr);
+    const whiteLabel = labelComponents(isWhiteArr);
+
+    const finalBg = new Uint8Array(n);
+    for (let idx=0; idx<n; idx++){
+      if (isThemeArr[idx]) { finalBg[idx] = 1; continue; }
+      if (isGreenArr[idx] && greenLabel.sizes[greenLabel.compId[idx]] > sizeThreshold) { finalBg[idx] = 1; continue; }
+      if (isWhiteArr[idx] && whiteLabel.sizes[whiteLabel.compId[idx]] > sizeThreshold) { finalBg[idx] = 1; continue; }
+    }
+
+    const fgMask = new Uint8Array(n);
+    for (let idx=0; idx<n; idx++) fgMask[idx] = finalBg[idx] ? 0 : 1;
+    const fgLabel = labelComponents(fgMask);
     let largestId = -1, largestSize = -1;
-    compSizes.forEach((s, id) => { if (s > largestSize){ largestSize = s; largestId = id; } });
+    fgLabel.sizes.forEach((s, id) => { if (s > largestSize){ largestSize = s; largestId = id; } });
 
     let minX=w, minY=h, maxX=0, maxY=0, found=false;
     for (let y=0; y<h; y++){
       for (let x=0; x<w; x++){
         const idx = y*w+x;
-        const keep = !isBg[idx] && compId[idx] === largestId;
+        const keep = fgMask[idx] && fgLabel.compId[idx] === largestId;
         if (!keep){
           data[idx*4+3] = 0;
         } else {
