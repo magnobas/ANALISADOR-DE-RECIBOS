@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Painel de Fotos - Time</title>
+<style>
+  :root{
+    --bg:#0c1410;
+    --panel:#121b16;
+    --accent:#ffcc00;
+    --accent2:#1f8a3d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Segoe UI', Arial, sans-serif;
+    background:var(--bg);
+    color:#eee;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:24px 16px 60px;
+  }
+  h1{
+    font-size:22px;
+    margin:0 0 4px;
+    text-align:center;
+  }
+  p.sub{
+    color:#9fb0a6;
+    margin:0 0 20px;
+    text-align:center;
+    font-size:13px;
+    max-width:640px;
+  }
+  .layout{
+    display:flex;
+    gap:24px;
+    width:100%;
+    max-width:1200px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid #25352c;
+    border-radius:12px;
+    padding:18px;
+    width:380px;
+  }
+  .panel h2{
+    font-size:15px;
+    margin:0 0 12px;
+    color:var(--accent);
+  }
+  label{
+    display:block;
+    font-size:12px;
+    color:#b9c7bf;
+    margin:10px 0 4px;
+  }
+  input[type=text]{
+    width:100%;
+    padding:8px 10px;
+    border-radius:6px;
+    border:1px solid #2e4337;
+    background:#0e1612;
+    color:#fff;
+    font-size:13px;
+  }
+  input[type=color]{
+    width:48px;
+    height:32px;
+    border:none;
+    border-radius:6px;
+    background:none;
+    cursor:pointer;
+  }
+  .color-row{
+    display:flex;
+    gap:16px;
+    align-items:center;
+  }
+  .color-row > div{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+  }
+  .color-row span{
+    font-size:11px;
+    color:#9fb0a6;
+  }
+  .dropzone{
+    border:2px dashed #2e4337;
+    border-radius:8px;
+    padding:18px;
+    text-align:center;
+    cursor:pointer;
+    font-size:13px;
+    color:#9fb0a6;
+    margin-top:10px;
+    transition:.15s;
+  }
+  .dropzone:hover{
+    border-color:var(--accent);
+    color:#fff;
+  }
+  .dropzone.drag{
+    border-color:var(--accent);
+    background:#16241c;
+  }
+  input[type=file]{display:none;}
+  .thumbs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin-top:12px;
+  }
+  .thumb{
+    position:relative;
+    width:56px;
+    height:56px;
+    border-radius:8px;
+    overflow:hidden;
+    border:2px solid #2e4337;
+    cursor:grab;
+  }
+  .thumb img{
+    width:100%;
+    height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  .thumb .rm{
+    position:absolute;
+    top:0;
+    right:0;
+    background:rgba(0,0,0,.65);
+    color:#fff;
+    width:18px;
+    height:18px;
+    font-size:12px;
+    line-height:18px;
+    text-align:center;
+    cursor:pointer;
+    border-radius:0 0 0 6px;
+  }
+  .thumb.dragover{
+    border-color:var(--accent);
+  }
+  .count{
+    font-size:12px;
+    margin-top:8px;
+    color:#9fb0a6;
+  }
+  .count strong{
+    color:var(--accent);
+  }
+  button{
+    margin-top:16px;
+    width:100%;
+    padding:11px;
+    border:none;
+    border-radius:8px;
+    background:var(--accent);
+    color:#1a1300;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+  }
+  button.secondary{
+    background:#1f8a3d;
+    color:#fff;
+    margin-top:8px;
+  }
+  button:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+  }
+  .canvas-wrap{
+    background:#000;
+    border-radius:12px;
+    padding:10px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  canvas{
+    max-width:100%;
+    height:auto;
+    border-radius:6px;
+    display:block;
+  }
+  .hint{
+    font-size:11px;
+    color:#7c8c83;
+    margin-top:6px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>🏆 Gerador de Painel de Fotos do Time</h1>
+  <p class="sub">
+    Envie as 17 fotos dos personagens (rostos), organize a ordem e gere o painel único.
+    As fotos não sofrem nenhuma alteração de rosto — apenas são recortadas/posicionadas no layout.
+  </p>
+
+  <div class="layout">
+
+    <div class="panel">
+      <h2>1. Configurações do painel</h2>
+
+      <label for="title">Título (faixa superior)</label>
+      <input type="text" id="title" value="BRAZIL" maxlength="20" />
+
+      <label for="subtitle">Texto da faixa inferior</label>
+      <input type="text" id="subtitle" value="YEAR 2B" maxlength="24" />
+
+      <div class="color-row">
+        <div>
+          <span>Cor principal</span>
+          <input type="color" id="colorMain" value="#1f8a3d" />
+        </div>
+        <div>
+          <span>Cor secundária</span>
+          <input type="color" id="colorAccent" value="#ffcc00" />
+        </div>
+        <div>
+          <span>Cor de fundo</span>
+          <input type="color" id="colorBg" value="#04150a" />
+        </div>
+      </div>
+
+      <h2 style="margin-top:18px;">2. Fotos (17 recomendado)</h2>
+      <div class="dropzone" id="dropzone">
+        📁 Clique ou arraste aqui até 17 fotos
+        <input type="file" id="fileInput" accept="image/*" multiple />
+      </div>
+      <div class="count">Fotos carregadas: <strong id="countLabel">0</strong> / 17</div>
+      <div class="hint">Arraste as miniaturas para reordenar. Clique no “x” para remover.</div>
+      <div class="thumbs" id="thumbs"></div>
+
+      <button id="generateBtn" disabled>Gerar painel</button>
+      <button id="downloadBtn" class="secondary" disabled>Baixar imagem (PNG)</button>
+    </div>
+
+    <div class="panel" style="width:auto;">
+      <h2>Pré-visualização</h2>
+      <div class="canvas-wrap">
+        <canvas id="canvas" width="1000" height="1400"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(function(){
+  const MAX_PHOTOS = 17;
+  const fileInput = document.getElementById('fileInput');
+  const dropzone = document.getElementById('dropzone');
+  const thumbsEl = document.getElementById('thumbs');
+  const countLabel = document.getElementById('countLabel');
+  const generateBtn = document.getElementById('generateBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  let photos = []; // { id, src, img }
+  let dragIndex = null;
+
+  function uid(){ return Math.random().toString(36).slice(2,9); }
+
+  function addFiles(fileList){
+    const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+    const room = MAX_PHOTOS - photos.length;
+    files.slice(0, room).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          photos.push({ id: uid(), src: e.target.result, img });
+          renderThumbs();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderThumbs(){
+    thumbsEl.innerHTML = '';
+    photos.forEach((p, idx) => {
+      const div = document.createElement('div');
+      div.className = 'thumb';
+      div.draggable = true;
+      div.dataset.idx = idx;
+
+      const img = document.createElement('img');
+      img.src = p.src;
+      div.appendChild(img);
+
+      const rm = document.createElement('div');
+      rm.className = 'rm';
+      rm.textContent = '✕';
+      rm.onclick = (ev) => {
+        ev.stopPropagation();
+        photos.splice(idx, 1);
+        renderThumbs();
+      };
+      div.appendChild(rm);
+
+      div.addEventListener('dragstart', () => { dragIndex = idx; });
+      div.addEventListener('dragover', (ev) => { ev.preventDefault(); div.classList.add('dragover'); });
+      div.addEventListener('dragleave', () => div.classList.remove('dragover'));
+      div.addEventListener('drop', (ev) => {
+        ev.preventDefault();
+        div.classList.remove('dragover');
+        if (dragIndex === null || dragIndex === idx) return;
+        const moved = photos.splice(dragIndex, 1)[0];
+        photos.splice(idx, 0, moved);
+        dragIndex = null;
+        renderThumbs();
+      });
+
+      thumbsEl.appendChild(div);
+    });
+
+    countLabel.textContent = photos.length;
+    generateBtn.disabled = photos.length === 0;
+  }
+
+  fileInput.addEventListener('change', (e) => addFiles(e.target.files));
+  dropzone.addEventListener('click', () => fileInput.click());
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('drag'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    addFiles(e.dataTransfer.files);
+  });
+
+  // ---------- Layout: distributes photos into staggered "team photo" rows ----------
+  function computeRows(n){
+    // Back rows smaller/more spaced, front rows bigger - mimics a real team photo.
+    // Pick a row size pattern close to sqrt-based distribution, max 5 per row.
+    const rows = [];
+    let remaining = n;
+    const preferred = [4, 5, 5, 4, 4]; // typical sizes from back to front
+    let i = 0;
+    while (remaining > 0) {
+      let size = preferred[i] !== undefined ? preferred[i] : 5;
+      if (size > remaining) size = remaining;
+      rows.push(size);
+      remaining -= size;
+      i++;
+    }
+    return rows;
+  }
+
+  function drawRoundedRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function hexToRgb(hex){
+    const v = hex.replace('#','');
+    const n = parseInt(v.length === 3 ? v.split('').map(c=>c+c).join('') : v, 16);
+    return { r:(n>>16)&255, g:(n>>8)&255, b:n&255 };
+  }
+
+  function drawBackground(W, H, colorBg, colorMain){
+    const bg = hexToRgb(colorBg);
+    const grad = ctx.createRadialGradient(W/2, H*0.35, 60, W/2, H*0.45, H*0.85);
+    grad.addColorStop(0, `rgba(${bg.r+30},${bg.g+50},${bg.b+30},1)`);
+    grad.addColorStop(0.55, colorBg);
+    grad.addColorStop(1, '#000000');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // stadium light beams
+    ctx.save();
+    ctx.globalAlpha = 0.10;
+    const beamCount = 7;
+    for (let i = 0; i < beamCount; i++){
+      const cx = (W / (beamCount - 1)) * i;
+      const beam = ctx.createLinearGradient(cx, 0, cx, H);
+      beam.addColorStop(0, '#ffffff');
+      beam.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = beam;
+      ctx.beginPath();
+      ctx.moveTo(cx - 70, 0);
+      ctx.lineTo(cx + 70, 0);
+      ctx.lineTo(cx + 220, H);
+      ctx.lineTo(cx - 220, H);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // faint diagonal field-line texture
+    ctx.save();
+    ctx.globalAlpha = 0.05;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    for (let x = -H; x < W; x += 36){
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + H, H);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // vignette
+    const vg = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, H*0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawTitleBanner(W, topY, title, colorMain, colorAccent){
+    const fontSize = Math.max(54, Math.min(96, 900 / Math.max(title.length, 3)));
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // stars row
+    ctx.fillStyle = colorAccent;
+    ctx.font = `${fontSize*0.32}px Arial`;
+    const stars = '★ ★ ★ ★ ★';
+    ctx.fillText(stars, W/2, topY - fontSize*0.62);
+
+    // title text with stroke + gradient fill
+    ctx.font = `900 ${fontSize}px 'Arial Black', Arial, sans-serif`;
+    const grad = ctx.createLinearGradient(W/2 - 200, topY - fontSize/2, W/2 + 200, topY + fontSize/2);
+    grad.addColorStop(0, colorAccent);
+    grad.addColorStop(0.5, '#ffffff');
+    grad.addColorStop(1, colorAccent);
+
+    ctx.lineWidth = fontSize * 0.16;
+    ctx.strokeStyle = colorMain;
+    ctx.strokeText(title.toUpperCase(), W/2, topY);
+    ctx.fillStyle = grad;
+    ctx.fillText(title.toUpperCase(), W/2, topY);
+    ctx.restore();
+  }
+
+  function drawBottomBanner(W, H, bottomY, bannerH, subtitle, colorMain, colorAccent){
+    const x = W * 0.08;
+    const w = W * 0.84;
+    ctx.save();
+
+    ctx.fillStyle = '#06120a';
+    drawRoundedRect(ctx, x, bottomY, w, bannerH, 14);
+    ctx.fill();
+
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = colorAccent;
+    drawRoundedRect(ctx, x, bottomY, w, bannerH, 14);
+    ctx.stroke();
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = colorMain;
+    drawRoundedRect(ctx, x + 8, bottomY + 8, w - 16, bannerH - 16, 10);
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const fontSize = Math.max(34, Math.min(60, (w * 0.9) / Math.max(subtitle.length, 4)));
+    ctx.font = `900 ${fontSize}px Arial, sans-serif`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(subtitle.toUpperCase(), W/2, bottomY + bannerH/2);
+    ctx.restore();
+  }
+
+  function drawPhoto(img, cx, cy, radius, colorAccent, colorMain){
+    ctx.save();
+
+    // soft shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = radius * 0.25;
+    ctx.shadowOffsetY = radius * 0.08;
+
+    // outer accent ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + radius*0.14, 0, Math.PI*2);
+    ctx.fillStyle = colorAccent;
+    ctx.fill();
+
+    ctx.shadowColor = 'transparent';
+
+    // inner ring (jersey-like collar color)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + radius*0.05, 0, Math.PI*2);
+    ctx.fillStyle = colorMain;
+    ctx.fill();
+
+    // clipped photo - drawn exactly as provided, only cropped to fit (cover)
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI*2);
+    ctx.closePath();
+    ctx.clip();
+
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const scale = Math.max((radius*2)/iw, (radius*2)/ih);
+    const dw = iw*scale, dh = ih*scale;
+    ctx.drawImage(img, cx - dw/2, cy - dh/2, dw, dh);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  function generatePoster(){
+    const W = canvas.width, H = canvas.height;
+    const title = document.getElementById('title').value || 'TIME';
+    const subtitle = document.getElementById('subtitle').value || '';
+    const colorMain = document.getElementById('colorMain').value;
+    const colorAccent = document.getElementById('colorAccent').value;
+    const colorBg = document.getElementById('colorBg').value;
+
+    ctx.clearRect(0, 0, W, H);
+    drawBackground(W, H, colorBg, colorMain);
+
+    const titleY = H * 0.10;
+    drawTitleBanner(W, titleY, title, colorMain, colorAccent);
+
+    const bannerH = H * 0.085;
+    const bannerY = H - bannerH - H*0.035;
+    if (subtitle.trim()){
+      drawBottomBanner(W, H, bannerY, bannerH, subtitle, colorMain, colorAccent);
+    }
+
+    // photo grid area
+    const gridTop = H * 0.165;
+    const gridBottom = subtitle.trim() ? (bannerY - H*0.025) : (H - H*0.04);
+    const gridHeight = gridBottom - gridTop;
+
+    const rows = computeRows(photos.length);
+    const rowCount = rows.length;
+    const rowGap = gridHeight / rowCount;
+
+    let photoIdx = 0;
+    rows.forEach((rowSize, rIndex) => {
+      // grow radius slightly for front rows (perspective effect)
+      const growth = rIndex / Math.max(rowCount - 1, 1);
+      const baseRadius = (W / 11) * (0.82 + growth * 0.36);
+      const cy = gridTop + rowGap * rIndex + rowGap/2;
+
+      const usableWidth = W * 0.88;
+      const slotWidth = usableWidth / rowSize;
+      const startX = (W - usableWidth)/2 + slotWidth/2;
+
+      for (let c = 0; c < rowSize; c++){
+        const photo = photos[photoIdx];
+        if (!photo) break;
+        const cx = startX + slotWidth * c;
+        drawPhoto(photo.img, cx, cy, baseRadius, colorAccent, colorMain);
+        photoIdx++;
+      }
+    });
+
+    downloadBtn.disabled = false;
+  }
+
+  generateBtn.addEventListener('click', generatePoster);
+
+  downloadBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.download = 'painel-time.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  renderThumbs();
+})();
+</script>
+</body>
+</html>
