@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Transferência Óptica — Envie arquivos com tela e câmera</title>
+<meta name="description" content="Transfira arquivos entre dois dispositivos usando apenas a tela e a câmera, sem rede, inspirado no decimen-optical-transfer." />
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0b1220;
+    --panel: #121a2b;
+    --panel-2: #182238;
+    --border: #263352;
+    --text: #e8edf9;
+    --muted: #93a1c2;
+    --accent: #4f8cff;
+    --accent-2: #22c55e;
+    --danger: #ef4444;
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f5fb;
+      --panel: #ffffff;
+      --panel-2: #f0f3fb;
+      --border: #dbe1f0;
+      --text: #101828;
+      --muted: #5b6478;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header h1 { font-size: 1.5rem; margin: 0 0 6px; }
+  header p { color: var(--muted); margin: 0; font-size: 0.92rem; }
+  .tabs { display: flex; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 4px; margin: 20px 0; }
+  .tab-btn {
+    flex: 1; border: 0; background: transparent; color: var(--muted); padding: 10px 14px;
+    border-radius: 999px; cursor: pointer; font-size: 0.95rem; font-weight: 600; transition: all .15s;
+  }
+  .tab-btn.active { background: var(--accent); color: #fff; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .view { display: none; }
+  .view.active { display: block; }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
+  input[type="file"], input[type="text"], textarea {
+    width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 10px 12px; font-size: 0.95rem;
+  }
+  textarea { resize: vertical; min-height: 80px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+  .field { flex: 1; min-width: 140px; }
+  .field small { display: block; color: var(--muted); margin-top: 4px; font-size: 0.75rem; }
+  input[type="range"] { width: 100%; }
+  .btn {
+    border: 0; border-radius: 10px; padding: 11px 20px; font-size: 0.95rem; font-weight: 700;
+    cursor: pointer; transition: transform .1s, opacity .15s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .stage {
+    display: flex; align-items: center; justify-content: center; background: #000;
+    border-radius: var(--radius); overflow: hidden; margin-top: 18px; aspect-ratio: 1 / 1; max-width: 420px; margin-left: auto; margin-right: auto;
+    position: relative;
+  }
+  .stage canvas, .stage video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .stage.hidden { display: none; }
+  .stats { margin-top: 14px; font-size: 0.85rem; color: var(--muted); text-align: center; }
+  .progress-outer { width: 100%; height: 10px; background: var(--panel-2); border-radius: 999px; overflow: hidden; margin-top: 12px; border: 1px solid var(--border); }
+  .progress-inner { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: .02em; }
+  .badge.ok { background: rgba(34,197,94,.15); color: var(--accent-2); }
+  .badge.warn { background: rgba(239,68,68,.15); color: var(--danger); }
+  .file-result {
+    margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--panel-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  .checkbox-row input { width: 16px; height: 16px; }
+  .checkbox-row label { margin: 0; }
+  .hint { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
+  footer { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 30px; }
+  footer a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📡 Transferência Óptica</h1>
+    <p>Envie arquivos entre dois dispositivos usando só a tela e a câmera — sem Wi-Fi, sem Bluetooth, sem servidor.</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="send">Enviar</button>
+    <button class="tab-btn" data-tab="receive">Receber</button>
+  </div>
+
+  <!-- SEND VIEW -->
+  <section id="view-send" class="view active">
+    <div class="panel">
+      <label for="fileInput">Arquivo</label>
+      <input type="file" id="fileInput" />
+      <div class="hint">Ou envie um texto em vez de um arquivo:</div>
+      <textarea id="textInput" placeholder="Cole um texto aqui para transferir como mensagem.txt"></textarea>
+
+      <div class="row">
+        <div class="field">
+          <label for="chunkSize">Tamanho do bloco: <span id="chunkSizeVal">500</span> B</label>
+          <input type="range" id="chunkSize" min="150" max="1400" step="50" value="500" />
+          <small>Menor = QR mais simples de ler. Maior = transferência mais rápida.</small>
+        </div>
+        <div class="field">
+          <label for="fps">Velocidade: <span id="fpsVal">5</span> qps</label>
+          <input type="range" id="fps" min="1" max="12" step="1" value="5" />
+          <small>Quadros de QR por segundo.</small>
+        </div>
+        <div class="field">
+          <label for="ecLevel">Correção de erro</label>
+          <select id="ecLevel" style="width:100%;background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;">
+            <option value="L">Baixa (mais dados)</option>
+            <option value="M" selected>Média</option>
+            <option value="Q">Alta</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="compressToggle" checked />
+        <label for="compressToggle">Comprimir automaticamente quando reduzir o tamanho (gzip)</label>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-primary" id="startSendBtn">▶ Iniciar transmissão</button>
+        <button class="btn btn-danger" id="stopSendBtn" disabled>■ Parar</button>
+      </div>
+    </div>
+
+    <div class="stage hidden" id="sendStage">
+      <canvas id="qrCanvas" width="500" height="500"></canvas>
+    </div>
+    <div class="stats" id="sendStats"></div>
+    <div class="progress-outer" id="sendProgressOuter" style="display:none;">
+      <div class="progress-inner" id="sendProgressInner"></div>
+    </div>
+  </section>
+
+  <!-- RECEIVE VIEW -->
+  <section id="view-receive" class="view">
+    <div class="panel">
+      <p style="margin-top:0;color:var(--muted);font-size:.9rem;">Aponte a câmera do dispositivo receptor para a tela que está exibindo os QR codes. Mantenha a distância e o foco estáveis.</p>
+      <div class="actions">
+        <button class="btn btn-primary" id="startRecvBtn">🎥 Iniciar câmera</button>
+        <button class="btn btn-danger" id="stopRecvBtn" disabled>■ Parar</button>
+        <button class="btn btn-outline" id="resetRecvBtn">↺ Reiniciar</button>
+      </div>
+    </div>
+
+    <div class="stage hidden" id="recvStage">
+      <video id="recvVideo" playsinline muted autoplay></video>
+    </div>
+    <canvas id="recvCanvas" style="display:none;"></canvas>
+
+    <div class="progress-outer" id="recvProgressOuter" style="display:none;">
+      <div class="progress-inner" id="recvProgressInner"></div>
+    </div>
+    <div class="stats" id="recvStats"></div>
+
+    <div class="file-result" id="recvResult" style="display:none;">
+      <div>
+        <div id="recvFileName" style="font-weight:700;"></div>
+        <div id="recvFileMeta" style="font-size:.8rem;color:var(--muted);"></div>
+      </div>
+      <a class="btn btn-primary" id="recvDownloadBtn" download>⬇ Baixar arquivo</a>
+    </div>
+  </section>
+
+  <footer>
+    Transferência 100% local, feita no navegador — nenhum byte passa por servidor.<br />
+    Inspirado no projeto <a href="https://github.com/bashalarmistalt/decimen-optical-transfer" target="_blank" rel="noopener">decimen-optical-transfer</a>.
+  </footer>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var MAGIC = "DECI1";
+
+  // ---------- Utils ----------
+  function bytesToBase64(bytes) {
+    var CHUNK = 0x8000;
+    var parts = [];
+    for (var i = 0; i < bytes.length; i += CHUNK) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK)));
+    }
+    return btoa(parts.join(""));
+  }
+
+  function base64ToBytes(b64) {
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function utf8ToBytes(str) {
+    return new TextEncoder().encode(str);
+  }
+
+  function bufferToHex(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var hex = "";
+    for (var i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, "0");
+    }
+    return hex;
+  }
+
+  async function sha256Hex(bytes) {
+    var digest = await crypto.subtle.digest("SHA-256", bytes);
+    return bufferToHex(digest);
+  }
+
+  async function gzip(bytes) {
+    if (!("CompressionStream" in window)) return null;
+    var cs = new CompressionStream("gzip");
+    var writer = cs.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    var buf = await new Response(cs.readable).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  async function gunzip(bytes) {
+    var ds = new DecompressionStream("gzip");
+    var writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+    var buf = await new Response(ds.readable).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+
+  function randomId() {
+    var chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    var id = "";
+    for (var i = 0; i < 6; i++) id += chars[Math.floor(Math.random() * chars.length)];
+    return id;
+  }
+
+  function formatBytes(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+    return (n / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function formatTime(seconds) {
+    if (seconds < 60) return Math.ceil(seconds) + "s";
+    var m = Math.floor(seconds / 60);
+    var s = Math.ceil(seconds % 60);
+    return m + "m " + s + "s";
+  }
+
+  // ---------- Tabs ----------
+  var tabButtons = document.querySelectorAll(".tab-btn");
+  tabButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      tabButtons.forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      document.querySelectorAll(".view").forEach(function (v) { v.classList.remove("active"); });
+      document.getElementById("view-" + btn.dataset.tab).classList.add("active");
+      if (btn.dataset.tab !== "send") stopSending();
+      if (btn.dataset.tab !== "receive") stopReceiving();
+    });
+  });
+
+  // ==================================================
+  // SENDER
+  // ==================================================
+  var fileInput = document.getElementById("fileInput");
+  var textInput = document.getElementById("textInput");
+  var chunkSizeSlider = document.getElementById("chunkSize");
+  var chunkSizeVal = document.getElementById("chunkSizeVal");
+  var fpsSlider = document.getElementById("fps");
+  var fpsVal = document.getElementById("fpsVal");
+  var ecLevelSelect = document.getElementById("ecLevel");
+  var compressToggle = document.getElementById("compressToggle");
+  var startSendBtn = document.getElementById("startSendBtn");
+  var stopSendBtn = document.getElementById("stopSendBtn");
+  var sendStage = document.getElementById("sendStage");
+  var qrCanvas = document.getElementById("qrCanvas");
+  var qrCtx = qrCanvas.getContext("2d");
+  var sendStats = document.getElementById("sendStats");
+  var sendProgressOuter = document.getElementById("sendProgressOuter");
+  var sendProgressInner = document.getElementById("sendProgressInner");
+
+  chunkSizeSlider.addEventListener("input", function () {
+    chunkSizeVal.textContent = chunkSizeSlider.value;
+  });
+  fpsSlider.addEventListener("input", function () {
+    fpsVal.textContent = fpsSlider.value;
+  });
+
+  var sendTimer = null;
+  var sendFrames = [];
+  var sendFrameIdx = 0;
+  var sendLoopCount = 0;
+  var sending = false;
+
+  function drawQr(text, ecLevel) {
+    var qr = qrcode(0, ecLevel);
+    qr.addData(text);
+    qr.make();
+    var count = qr.getModuleCount();
+    var size = qrCanvas.width;
+    var cell = size / count;
+    qrCtx.fillStyle = "#ffffff";
+    qrCtx.fillRect(0, 0, size, size);
+    qrCtx.fillStyle = "#000000";
+    for (var r = 0; r < count; r++) {
+      for (var c = 0; c < count; c++) {
+        if (qr.isDark(r, c)) {
+          qrCtx.fillRect(Math.round(c * cell), Math.round(r * cell), Math.ceil(cell), Math.ceil(cell));
+        }
+      }
+    }
+  }
+
+  function stopSending() {
+    if (sendTimer) { clearInterval(sendTimer); sendTimer = null; }
+    sending = false;
+    startSendBtn.disabled = false;
+    stopSendBtn.disabled = true;
+    fileInput.disabled = false;
+    textInput.disabled = false;
+  }
+
+  function tickSend() {
+    if (!sending || sendFrames.length === 0) return;
+    if (sendFrameIdx >= sendFrames.length) {
+      sendFrameIdx = 0;
+      sendLoopCount++;
+    }
+    drawQr(sendFrames[sendFrameIdx], ecLevelSelect.value);
+    var pct = Math.round(((sendFrameIdx + 1) / sendFrames.length) * 100);
+    sendProgressInner.style.width = pct + "%";
+    sendStats.textContent =
+      "Bloco " + (sendFrameIdx + 1) + " / " + sendFrames.length +
+      " · repetição " + (sendLoopCount + 1) +
+      " — mantenha em loop até o receptor completar a leitura.";
+    sendFrameIdx++;
+  }
+
+  async function buildSendFrames(name, mime, originalBytes, chunkSize, wantCompress) {
+    var sha = await sha256Hex(originalBytes);
+    var payload = originalBytes;
+    var comp = "0";
+
+    if (wantCompress) {
+      var gz = await gzip(originalBytes);
+      if (gz && gz.length < originalBytes.length) {
+        payload = gz;
+        comp = "1";
+      }
+    }
+
+    var id = randomId();
+    var nameB64 = btoa(unescape(encodeURIComponent(name)));
+    var mimeB64 = btoa(unescape(encodeURIComponent(mime || "application/octet-stream")));
+    var n = Math.max(1, Math.ceil(payload.length / chunkSize));
+    var frames = [];
+
+    for (var i = 0; i < n; i++) {
+      var slice = payload.subarray(i * chunkSize, (i + 1) * chunkSize);
+      var dataB64 = bytesToBase64(slice);
+      var frame = [MAGIC, id, i, n, nameB64, mimeB64, originalBytes.length, sha, comp, dataB64].join("|");
+      frames.push(frame);
+    }
+    return { frames: frames, sha: sha, compressed: comp === "1", payloadSize: payload.length };
+  }
+
+  startSendBtn.addEventListener("click", async function () {
+    var file = fileInput.files && fileInput.files[0];
+    var text = textInput.value;
+
+    if (!file && !text.trim()) {
+      alert("Escolha um arquivo ou digite um texto para enviar.");
+      return;
+    }
+
+    startSendBtn.disabled = true;
+    sendStats.textContent = "Preparando dados...";
+
+    var name, mime, bytes;
+    if (file) {
+      name = file.name;
+      mime = file.type || "application/octet-stream";
+      bytes = new Uint8Array(await file.arrayBuffer());
+    } else {
+      name = "mensagem.txt";
+      mime = "text/plain";
+      bytes = utf8ToBytes(text);
+    }
+
+    var chunkSize = parseInt(chunkSizeSlider.value, 10);
+    var built = await buildSendFrames(name, mime, bytes, chunkSize, compressToggle.checked);
+
+    sendFrames = built.frames;
+    sendFrameIdx = 0;
+    sendLoopCount = 0;
+    sending = true;
+
+    fileInput.disabled = true;
+    textInput.disabled = true;
+    stopSendBtn.disabled = false;
+    sendStage.classList.remove("hidden");
+    sendProgressOuter.style.display = "block";
+
+    var fps = parseInt(fpsSlider.value, 10);
+    var estSeconds = sendFrames.length / fps;
+    sendStats.textContent =
+      "Pronto: " + sendFrames.length + " blocos (" + formatBytes(built.payloadSize) +
+      (built.compressed ? ", comprimido" : "") + "). 1 ciclo ≈ " + formatTime(estSeconds) + ".";
+
+    if (sendTimer) clearInterval(sendTimer);
+    sendTimer = setInterval(tickSend, Math.round(1000 / fps));
+  });
+
+  stopSendBtn.addEventListener("click", function () {
+    stopSending();
+    sendStats.textContent = "Transmissão parada.";
+  });
+
+  // ==================================================
+  // RECEIVER
+  // ==================================================
+  var startRecvBtn = document.getElementById("startRecvBtn");
+  var stopRecvBtn = document.getElementById("stopRecvBtn");
+  var resetRecvBtn = document.getElementById("resetRecvBtn");
+  var recvStage = document.getElementById("recvStage");
+  var recvVideo = document.getElementById("recvVideo");
+  var recvCanvas = document.getElementById("recvCanvas");
+  var recvCtx = recvCanvas.getContext("2d", { willReadFrequently: true });
+  var recvStats = document.getElementById("recvStats");
+  var recvProgressOuter = document.getElementById("recvProgressOuter");
+  var recvProgressInner = document.getElementById("recvProgressInner");
+  var recvResult = document.getElementById("recvResult");
+  var recvFileName = document.getElementById("recvFileName");
+  var recvFileMeta = document.getElementById("recvFileMeta");
+  var recvDownloadBtn = document.getElementById("recvDownloadBtn");
+
+  var recvStream = null;
+  var recvRaf = null;
+  var recvState = null;
+
+  function freshRecvState() {
+    return {
+      id: null,
+      total: null,
+      chunks: new Map(),
+      name: null,
+      mime: null,
+      originalSize: null,
+      sha: null,
+      comp: null,
+      done: false
+    };
+  }
+
+  function resetReceiver() {
+    recvState = freshRecvState();
+    recvProgressOuter.style.display = "none";
+    recvProgressInner.style.width = "0%";
+    recvResult.style.display = "none";
+    recvStats.textContent = "";
+    if (recvDownloadBtn.href) URL.revokeObjectURL(recvDownloadBtn.href);
+    recvDownloadBtn.removeAttribute("href");
+  }
+  resetReceiver();
+
+  function parseFrame(text) {
+    var parts = text.split("|");
+    if (parts.length !== 10 || parts[0] !== MAGIC) return null;
+    return {
+      id: parts[1],
+      i: parseInt(parts[2], 10),
+      n: parseInt(parts[3], 10),
+      nameB64: parts[4],
+      mimeB64: parts[5],
+      originalSize: parseInt(parts[6], 10),
+      sha: parts[7],
+      comp: parts[8],
+      dataB64: parts[9]
+    };
+  }
+
+  async function handleDecoded(text) {
+    if (recvState.done) return;
+    var f = parseFrame(text);
+    if (!f) return;
+
+    if (recvState.id === null) {
+      recvState.id = f.id;
+      recvState.total = f.n;
+      recvState.name = decodeURIComponent(escape(atob(f.nameB64)));
+      recvState.mime = decodeURIComponent(escape(atob(f.mimeB64)));
+      recvState.originalSize = f.originalSize;
+      recvState.sha = f.sha;
+      recvState.comp = f.comp;
+      recvProgressOuter.style.display = "block";
+    }
+
+    if (f.id !== recvState.id) return; // outra transmissão, ignora
+    if (!recvState.chunks.has(f.i)) {
+      recvState.chunks.set(f.i, base64ToBytes(f.dataB64));
+    }
+
+    var received = recvState.chunks.size;
+    var pct = Math.round((received / recvState.total) * 100);
+    recvProgressInner.style.width = pct + "%";
+    recvStats.textContent =
+      "Recebendo \"" + recvState.name + "\": " + received + " / " + recvState.total + " blocos (" + pct + "%)";
+
+    if (received === recvState.total) {
+      await finalizeReceive();
+    }
+  }
+
+  async function finalizeReceive() {
+    recvState.done = true;
+    recvStats.textContent = "Reconstruindo arquivo...";
+
+    var total = 0;
+    for (var i = 0; i < recvState.total; i++) total += recvState.chunks.get(i).length;
+    var payload = new Uint8Array(total);
+    var offset = 0;
+    for (var j = 0; j < recvState.total; j++) {
+      var c = recvState.chunks.get(j);
+      payload.set(c, offset);
+      offset += c.length;
+    }
+
+    var finalBytes = payload;
+    if (recvState.comp === "1") {
+      try {
+        finalBytes = await gunzip(payload);
+      } catch (e) {
+        recvStats.textContent = "Erro ao descomprimir os dados recebidos.";
+        return;
+      }
+    }
+
+    var checkHex = await sha256Hex(finalBytes);
+    var verified = checkHex === recvState.sha;
+
+    var blob = new Blob([finalBytes], { type: recvState.mime || "application/octet-stream" });
+    var url = URL.createObjectURL(blob);
+    recvDownloadBtn.href = url;
+    recvDownloadBtn.download = recvState.name;
+    recvFileName.textContent = recvState.name;
+    recvFileMeta.innerHTML =
+      formatBytes(finalBytes.length) + " · " +
+      "<span class=\"badge " + (verified ? "ok" : "warn") + "\">" +
+      (verified ? "Integridade verificada (SHA-256)" : "Checksum não confere") + "</span>";
+    recvResult.style.display = "flex";
+    recvStats.textContent = "Transferência concluída!";
+    stopReceiving();
+  }
+
+  function recvLoop() {
+    if (!recvStream) return;
+    if (recvVideo.readyState === recvVideo.HAVE_ENOUGH_DATA) {
+      var w = recvVideo.videoWidth;
+      var h = recvVideo.videoHeight;
+      if (w && h) {
+        var maxDim = 900;
+        var scale = Math.min(1, maxDim / Math.max(w, h));
+        var cw = Math.round(w * scale);
+        var ch = Math.round(h * scale);
+        if (recvCanvas.width !== cw || recvCanvas.height !== ch) {
+          recvCanvas.width = cw;
+          recvCanvas.height = ch;
+        }
+        recvCtx.drawImage(recvVideo, 0, 0, cw, ch);
+        var imageData = recvCtx.getImageData(0, 0, cw, ch);
+        var code = jsQR(imageData.data, cw, ch, { inversionAttempts: "dontInvert" });
+        if (code && code.data) {
+          handleDecoded(code.data);
+        }
+      }
+    }
+    recvRaf = requestAnimationFrame(recvLoop);
+  }
+
+  function stopReceiving() {
+    if (recvRaf) { cancelAnimationFrame(recvRaf); recvRaf = null; }
+    if (recvStream) {
+      recvStream.getTracks().forEach(function (t) { t.stop(); });
+      recvStream = null;
+    }
+    recvStage.classList.add("hidden");
+    startRecvBtn.disabled = false;
+    stopRecvBtn.disabled = true;
+  }
+
+  startRecvBtn.addEventListener("click", async function () {
+    try {
+      recvStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+    } catch (e) {
+      alert("Não foi possível acessar a câmera: " + e.message);
+      return;
+    }
+    recvVideo.srcObject = recvStream;
+    await recvVideo.play();
+    recvStage.classList.remove("hidden");
+    startRecvBtn.disabled = true;
+    stopRecvBtn.disabled = false;
+    if (!recvState || recvState.id !== null && recvState.done) resetReceiver();
+    recvRaf = requestAnimationFrame(recvLoop);
+  });
+
+  stopRecvBtn.addEventListener("click", stopReceiving);
+  resetRecvBtn.addEventListener("click", function () {
+    stopReceiving();
+    resetReceiver();
+  });
+})();
+</script>
+</body>
+</html>
