@@ -12499,6 +12499,15 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
   .hint { font-size: 0.78rem; color: var(--muted); margin-top: 6px; }
   footer { text-align: center; color: var(--muted); font-size: 0.78rem; margin-top: 30px; }
   footer a { color: var(--accent); }
+  .error-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: rgba(239,68,68,.12); border: 1px solid var(--danger); color: var(--danger);
+    border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; margin-bottom: 4px;
+  }
+  .error-banner button {
+    background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 1rem; line-height: 1;
+    padding: 0 2px; flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -12507,6 +12516,11 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     <h1>📡 Transferência Óptica</h1>
     <p>Envie arquivos entre dois dispositivos usando só a tela e a câmera — sem Wi-Fi, sem Bluetooth, sem servidor.</p>
   </header>
+
+  <div id="errorBanner" class="error-banner" style="display:none;">
+    <span id="errorBannerText"></span>
+    <button id="errorBannerClose" type="button" aria-label="Fechar">✕</button>
+  </div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="send">Enviar</button>
@@ -12524,7 +12538,7 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       <div class="row">
         <div class="field">
           <label for="chunkSize">Tamanho do bloco: <span id="chunkSizeVal">500</span> B</label>
-          <input type="range" id="chunkSize" min="150" max="1400" step="50" value="500" />
+          <input type="range" id="chunkSize" min="150" max="900" step="50" value="500" />
           <small>Menor = QR mais simples de ler. Maior = transferência mais rápida.</small>
         </div>
         <div class="field">
@@ -12634,9 +12648,85 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     return hex;
   }
 
+  function sha256Fallback(bytes) {
+    var K = [
+      0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+      0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+      0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+      0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+      0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+      0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+      0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+      0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+    ];
+    var H = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+
+    var len = bytes.length;
+    var bitLenHi = Math.floor(len / 0x20000000) * 8;
+    var bitLenLo = (len << 3) >>> 0;
+    var withOne = len + 1;
+    var padded = withOne + ((withOne % 64 <= 56) ? (56 - (withOne % 64)) : (120 - (withOne % 64)));
+    var total = padded + 8;
+    var buf = new Uint8Array(total);
+    buf.set(bytes);
+    buf[len] = 0x80;
+    buf[total - 8] = (bitLenHi >>> 24) & 0xff;
+    buf[total - 7] = (bitLenHi >>> 16) & 0xff;
+    buf[total - 6] = (bitLenHi >>> 8) & 0xff;
+    buf[total - 5] = bitLenHi & 0xff;
+    buf[total - 4] = (bitLenLo >>> 24) & 0xff;
+    buf[total - 3] = (bitLenLo >>> 16) & 0xff;
+    buf[total - 2] = (bitLenLo >>> 8) & 0xff;
+    buf[total - 1] = bitLenLo & 0xff;
+
+    var w = new Int32Array(64);
+    function rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+
+    for (var offset = 0; offset < total; offset += 64) {
+      for (var i = 0; i < 16; i++) {
+        var j = offset + i * 4;
+        w[i] = ((buf[j] << 24) | (buf[j+1] << 16) | (buf[j+2] << 8) | buf[j+3]) | 0;
+      }
+      for (var i = 16; i < 64; i++) {
+        var s0 = rotr(w[i-15], 7) ^ rotr(w[i-15], 18) ^ (w[i-15] >>> 3);
+        var s1 = rotr(w[i-2], 17) ^ rotr(w[i-2], 19) ^ (w[i-2] >>> 10);
+        w[i] = (w[i-16] + s0 + w[i-7] + s1) | 0;
+      }
+
+      var a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+      for (var i = 0; i < 64; i++) {
+        var S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        var ch = (e & f) ^ (~e & g);
+        var temp1 = (h + S1 + ch + K[i] + w[i]) | 0;
+        var S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        var maj = (a & b) ^ (a & c) ^ (b & c);
+        var temp2 = (S0 + maj) | 0;
+
+        h = g; g = f; f = e; e = (d + temp1) | 0;
+        d = c; c = b; b = a; a = (temp1 + temp2) | 0;
+      }
+
+      H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0;
+      H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+    }
+
+    var hex = "";
+    for (var i = 0; i < 8; i++) {
+      hex += (H[i] >>> 0).toString(16).padStart(8, "0");
+    }
+    return hex;
+  }
+
   async function sha256Hex(bytes) {
-    var digest = await crypto.subtle.digest("SHA-256", bytes);
-    return bufferToHex(digest);
+    if (window.crypto && window.crypto.subtle && window.isSecureContext !== false) {
+      try {
+        var digest = await crypto.subtle.digest("SHA-256", bytes);
+        return bufferToHex(digest);
+      } catch (e) {
+        // Cai para a implementação pura em JS abaixo (ex.: contexto não seguro).
+      }
+    }
+    return sha256Fallback(bytes);
   }
 
   async function gzip(bytes) {
@@ -12677,6 +12767,27 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
     var s = Math.ceil(seconds % 60);
     return m + "m " + s + "s";
   }
+
+  // ---------- Erros ----------
+  var errorBanner = document.getElementById("errorBanner");
+  var errorBannerText = document.getElementById("errorBannerText");
+  document.getElementById("errorBannerClose").addEventListener("click", function () {
+    errorBanner.style.display = "none";
+  });
+
+  function showError(message) {
+    errorBannerText.textContent = message;
+    errorBanner.style.display = "flex";
+  }
+
+  window.addEventListener("error", function (event) {
+    showError("Erro inesperado: " + (event.message || "veja o console para detalhes."));
+  });
+  window.addEventListener("unhandledrejection", function (event) {
+    var reason = event.reason;
+    var msg = (reason && (reason.message || reason.toString)) ? (reason.message || reason.toString()) : String(reason);
+    showError("Erro inesperado: " + msg);
+  });
 
   // ---------- Tabs ----------
   var tabButtons = document.querySelectorAll(".tab-btn");
@@ -12758,7 +12869,13 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       sendFrameIdx = 0;
       sendLoopCount++;
     }
-    drawQr(sendFrames[sendFrameIdx], ecLevelSelect.value);
+    try {
+      drawQr(sendFrames[sendFrameIdx], ecLevelSelect.value);
+    } catch (err) {
+      stopSending();
+      showError("A transmissão parou: " + ((err && err.message) ? err.message : String(err)));
+      return;
+    }
     var pct = Math.round(((sendFrameIdx + 1) / sendFrames.length) * 100);
     sendProgressInner.style.width = pct + "%";
     sendStats.textContent =
@@ -12805,42 +12922,57 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       return;
     }
 
+    errorBanner.style.display = "none";
     startSendBtn.disabled = true;
     sendStats.textContent = "Preparando dados...";
 
-    var name, mime, bytes;
-    if (file) {
-      name = file.name;
-      mime = file.type || "application/octet-stream";
-      bytes = new Uint8Array(await file.arrayBuffer());
-    } else {
-      name = "mensagem.txt";
-      mime = "text/plain";
-      bytes = utf8ToBytes(text);
+    try {
+      var name, mime, bytes;
+      if (file) {
+        name = file.name;
+        mime = file.type || "application/octet-stream";
+        bytes = new Uint8Array(await file.arrayBuffer());
+      } else {
+        name = "mensagem.txt";
+        mime = "text/plain";
+        bytes = utf8ToBytes(text);
+      }
+
+      var chunkSize = parseInt(chunkSizeSlider.value, 10);
+      var built = await buildSendFrames(name, mime, bytes, chunkSize, compressToggle.checked);
+
+      // Confere se o primeiro bloco realmente cabe no nível de correção de
+      // erro escolhido antes de iniciar o loop (evita travar silenciosamente).
+      drawQr(built.frames[0], ecLevelSelect.value);
+
+      sendFrames = built.frames;
+      sendFrameIdx = 0;
+      sendLoopCount = 0;
+      sending = true;
+
+      fileInput.disabled = true;
+      textInput.disabled = true;
+      stopSendBtn.disabled = false;
+      sendStage.classList.remove("hidden");
+      sendProgressOuter.style.display = "block";
+
+      var fps = parseInt(fpsSlider.value, 10);
+      var estSeconds = sendFrames.length / fps;
+      sendStats.textContent =
+        "Pronto: " + sendFrames.length + " blocos (" + formatBytes(built.payloadSize) +
+        (built.compressed ? ", comprimido" : "") + "). 1 ciclo ≈ " + formatTime(estSeconds) + ".";
+
+      if (sendTimer) clearInterval(sendTimer);
+      sendTimer = setInterval(tickSend, Math.round(1000 / fps));
+    } catch (err) {
+      var msg = (err && err.message) ? err.message : String(err);
+      if (msg.indexOf("overflow") !== -1) {
+        msg = "O bloco de dados é grande demais para o nível de correção de erro escolhido. Reduza o \"Tamanho do bloco\" ou selecione uma correção de erro mais baixa.";
+      }
+      showError("Não foi possível gerar o QR code: " + msg);
+      sendStats.textContent = "Falha ao preparar a transmissão.";
+      startSendBtn.disabled = false;
     }
-
-    var chunkSize = parseInt(chunkSizeSlider.value, 10);
-    var built = await buildSendFrames(name, mime, bytes, chunkSize, compressToggle.checked);
-
-    sendFrames = built.frames;
-    sendFrameIdx = 0;
-    sendLoopCount = 0;
-    sending = true;
-
-    fileInput.disabled = true;
-    textInput.disabled = true;
-    stopSendBtn.disabled = false;
-    sendStage.classList.remove("hidden");
-    sendProgressOuter.style.display = "block";
-
-    var fps = parseInt(fpsSlider.value, 10);
-    var estSeconds = sendFrames.length / fps;
-    sendStats.textContent =
-      "Pronto: " + sendFrames.length + " blocos (" + formatBytes(built.payloadSize) +
-      (built.compressed ? ", comprimido" : "") + "). 1 ciclo ≈ " + formatTime(estSeconds) + ".";
-
-    if (sendTimer) clearInterval(sendTimer);
-    sendTimer = setInterval(tickSend, Math.round(1000 / fps));
   });
 
   stopSendBtn.addEventListener("click", function () {
@@ -12913,23 +13045,29 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
 
   async function handleDecoded(text) {
     if (recvState.done) return;
-    var f = parseFrame(text);
-    if (!f) return;
+    var f;
+    try {
+      f = parseFrame(text);
+      if (!f) return;
 
-    if (recvState.id === null) {
-      recvState.id = f.id;
-      recvState.total = f.n;
-      recvState.name = decodeURIComponent(escape(atob(f.nameB64)));
-      recvState.mime = decodeURIComponent(escape(atob(f.mimeB64)));
-      recvState.originalSize = f.originalSize;
-      recvState.sha = f.sha;
-      recvState.comp = f.comp;
-      recvProgressOuter.style.display = "block";
-    }
+      if (recvState.id === null) {
+        recvState.id = f.id;
+        recvState.total = f.n;
+        recvState.name = decodeURIComponent(escape(atob(f.nameB64)));
+        recvState.mime = decodeURIComponent(escape(atob(f.mimeB64)));
+        recvState.originalSize = f.originalSize;
+        recvState.sha = f.sha;
+        recvState.comp = f.comp;
+        recvProgressOuter.style.display = "block";
+      }
 
-    if (f.id !== recvState.id) return; // outra transmissão, ignora
-    if (!recvState.chunks.has(f.i)) {
-      recvState.chunks.set(f.i, base64ToBytes(f.dataB64));
+      if (f.id !== recvState.id) return; // outra transmissão, ignora
+      if (!recvState.chunks.has(f.i)) {
+        recvState.chunks.set(f.i, base64ToBytes(f.dataB64));
+      }
+    } catch (e) {
+      // Leitura de câmera ruidosa pode produzir um frame corrompido; ignora e continua escaneando.
+      return;
     }
 
     var received = recvState.chunks.size;
@@ -12939,7 +13077,13 @@ function findAlignmentPattern(matrix, alignmentPatternQuads, topRight, topLeft, 
       "Recebendo \"" + recvState.name + "\": " + received + " / " + recvState.total + " blocos (" + pct + "%)";
 
     if (received === recvState.total) {
-      await finalizeReceive();
+      try {
+        await finalizeReceive();
+      } catch (err) {
+        showError("Erro ao remontar o arquivo: " + ((err && err.message) ? err.message : String(err)));
+        recvStats.textContent = "Falha ao remontar o arquivo.";
+        recvState.done = false;
+      }
     }
   }
 
