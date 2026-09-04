@@ -18,3 +18,7 @@ View your app in AI Studio: https://ai.studio/apps/drive/1-C1xS-CZcyM73UoH0HdIOy
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+## Gerador de Anúncios — ALUGA PHB
+
+Um app HTML autônomo (sem instalação, sem build) para montar folders de locação/venda de imóveis no estilo ALUGA PHB, em paleta pastel. Basta abrir `gerador-anuncios/index.html` no navegador: preencha fotos, endereço, quartos, comodidades, valor e WhatsApp, e a prévia do anúncio é montada automaticamente ao lado, pronta para baixar como imagem (PNG) ou imprimir/salvar em PDF.
